@@ -387,43 +387,36 @@ darwin_driver_init (unsigned int *decoded_options_count,
   if (seenX86)
     {
       if (seenX86_64 || seenM64)
-	{
-	  const char *op = (seenX86_64? "-arch x86_64": "-m64");
-	  warning (0, "%qs conflicts with %<-arch i386%> (%qs ignored)",
-		   op, op);
-	}
-      if (! seenM32) /* Add -m32 if the User didn't. */
+	warning (0, "%qs conflicts with %<i386%> (arch flags ignored)",
+	        (seenX86_64? "x86_64": "-m64"));
+      else if (! seenM32) /* Add -m32 if the User didn't. */
 	appendM32 = true;
     }
   else if (seenX86_64)
     {
-      if (seenM32)
-	warning (0, "%<-m32%> conflicts with %<-arch x86_64%>"
-		    " (%<-m32%> ignored)");
-      if (! seenM64) /* Add -m64 if the User didn't. */
+      if (seenX86 || seenM32)
+	warning (0, "%qs conflicts with %<x86_64%> (arch flags ignored)",
+		 (seenX86? "i386": "-m32"));
+      else if (! seenM64) /* Add -m64 if the User didn't. */
 	appendM64 = true;
     }  
 #elif DARWIN_PPC
   if (seenX86 || seenX86_64)
-    warning (0, "this compiler does not support x86"
-		" (%<-arch%> option ignored)");
+    warning (0, "this compiler does not support x86 (arch flags ignored)");
   if (seenPPC)
     {
       if (seenPPC64 || seenM64)
-	{
-	  const char *op = (seenPPC64? "-arch ppc64": "-m64");
-	  warning (0, "%qs conflicts with %<-arch ppc%> (%qs ignored)",
-		   op, op);
-	}
-      if (! seenM32) /* Add -m32 if the User didn't. */
+	warning (0, "%qs conflicts with %<ppc%> (arch flags ignored)",
+		 (seenPPC64? "ppc64": "-m64"));
+      else if (! seenM32) /* Add -m32 if the User didn't. */
 	appendM32 = true;
     }
   else if (seenPPC64)
     {
-      if (seenM32)
-	warning (0, "%<-m32%> conflicts with %<-arch ppc64%>"
-		    " (%<-m32%> ignored)");
-      if (! seenM64) /* Add -m64 if the User didn't. */
+      if (seenPPC || seenM32)
+	warning (0, "%qs conflicts with %<ppc64%> (arch flags ignored)",
+		 (seenPPC? "ppc": "-m32"));
+      else if (! seenM64) /* Add -m64 if the User didn't. */
 	appendM64 = true;
     }
 #endif
