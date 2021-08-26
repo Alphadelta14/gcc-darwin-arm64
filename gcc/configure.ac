@@ -4784,7 +4784,7 @@ foo:	nop
     case $target_os in
        darwin2[[0-9]]* | darwin19*)
         gcc_GAS_CHECK_FEATURE([llvm assembler x86-pad-for-align option],
-          gcc_cv_as_mllvm_x86_pad_for_align,,
+          gcc_cv_as_mllvm_x86_pad_for_align,
           [-mllvm -x86-pad-for-align=false], [.text],,
           [AC_DEFINE(HAVE_AS_MLLVM_X86_PAD_FOR_ALIGN, 1,
 	    [Define if your Mac OS X assembler supports -mllvm -x86-pad-for-align=false.])])
@@ -5397,6 +5397,57 @@ case "$target" in
       echo "*** This configuration requires the GNU assembler" >&2
       exit 1
     fi
+    ;;
+esac
+
+# This tests if the assembler supports two registers for global_load functions
+# (like in LLVM versions <12) or one register (like in LLVM 12).
+case "$target" in
+  amdgcn-* | gcn-*)
+    AC_MSG_CHECKING(assembler fix for global_load functions)
+    gcc_cv_as_gcn_global_load_fixed=yes
+    if test x$gcc_cv_as != x; then
+      cat > conftest.s <<EOF
+	global_store_dwordx2    v[[1:2]], v[[4:5]], s[[14:15]]
+EOF
+      if $gcc_cv_as -triple=amdgcn--amdhsa -filetype=obj -mcpu=gfx900 -o conftest.o conftest.s > /dev/null 2>&1; then
+        gcc_cv_as_gcn_global_load_fixed=no
+      fi
+      rm -f conftest.s conftest.o conftest
+    fi
+    global_load_fixed=`if test x$gcc_cv_as_gcn_global_load_fixed = xyes; then echo 1; else echo 0; fi`
+    AC_DEFINE_UNQUOTED(HAVE_GCN_ASM_GLOBAL_LOAD_FIXED, $global_load_fixed,
+      [Define if your assembler has fixed global_load functions.])
+    AC_MSG_RESULT($gcc_cv_as_gcn_global_load_fixed)
+    ;;
+esac
+
+case "$target" in
+  amdgcn-* | gcn-*)
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=+sram-ecc for fiji],
+      gcc_cv_as_gcn_sram_ecc_fiji,
+      [-triple=amdgcn--amdhsa -mcpu=fiji -mattr=-xnack -mattr=+sram-ecc],
+      [.amdgcn_target "amdgcn-unknown-amdhsa--gfx803+sram-ecc"],,
+      [AC_DEFINE(HAVE_GCN_SRAM_ECC_FIJI, 1,
+       [Define if your assembler allows -mattr=+sram-ecc for fiji.])])
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=+sram-ecc for gfx900],
+      gcc_cv_as_gcn_sram_ecc_gfx900,
+      [-triple=amdgcn--amdhsa -mcpu=gfx900 -mattr=-xnack -mattr=+sram-ecc],
+      [.amdgcn_target "amdgcn-unknown-amdhsa--gfx900+sram-ecc"],,
+      [AC_DEFINE(HAVE_GCN_SRAM_ECC_GFX900, 1,
+       [Define if your assembler allows -mattr=+sram-ecc for gfx900.])])
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=+sram-ecc for gfx906],
+      gcc_cv_as_gcn_sram_ecc_gfx906,
+      [-triple=amdgcn--amdhsa -mcpu=gfx906 -mattr=-xnack -mattr=+sram-ecc],
+      [.amdgcn_target "amdgcn-unknown-amdhsa--gfx906+sram-ecc"],,
+      [AC_DEFINE(HAVE_GCN_SRAM_ECC_GFX906, 1,
+       [Define if your assembler allows -mattr=+sram-ecc for gfx906.])])
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=+sram-ecc for gfx908],
+      gcc_cv_as_gcn_sram_ecc_gfx908,
+      [-triple=amdgcn--amdhsa -mcpu=gfx908 -mattr=-xnack -mattr=+sram-ecc],
+      [.amdgcn_target "amdgcn-unknown-amdhsa--gfx908+sram-ecc"],,
+      [AC_DEFINE(HAVE_GCN_SRAM_ECC_GFX908, 1,
+       [Define if your assembler allows -mattr=+sram-ecc for gfx908.])])
     ;;
 esac
 
