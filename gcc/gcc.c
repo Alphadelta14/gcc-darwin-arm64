@@ -3082,6 +3082,32 @@ find_a_file (const struct path_prefix *pprefix, const char *name, int mode,
 				file_at_path, &info);
 }
 
+/* Specialization of find_a_file for programs that also takes into account
+   configure-specified default programs. */
+
+static char*
+find_a_program (const char *name)
+{
+  /* Do not search if default matches query. */
+
+#ifdef DEFAULT_ASSEMBLER
+  if (! strcmp (name, "as") && access (DEFAULT_ASSEMBLER, X_OK) == 0)
+    return xstrdup (DEFAULT_ASSEMBLER);
+#endif
+
+#ifdef DEFAULT_LINKER
+  if (! strcmp (name, "ld") && access (DEFAULT_LINKER, X_OK) == 0)
+    return xstrdup (DEFAULT_LINKER);
+#endif
+
+#ifdef DEFAULT_DSYMUTIL
+  if (! strcmp (name, "dsymutil") && access (DEFAULT_DSYMUTIL, X_OK) == 0)
+    return xstrdup (DEFAULT_DSYMUTIL);
+#endif
+
+  return find_a_file (&exec_prefixes, name, X_OK, false);
+}
+
 /* Ranking of prefixes in the sort list. -B prefixes are put before
    all others.  */
 
