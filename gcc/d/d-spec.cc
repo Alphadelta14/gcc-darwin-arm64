@@ -456,12 +456,37 @@ lang_specific_driver (cl_decoded_option **in_decoded_options,
     new_decoded_options[j++] = *saw_libcxx;
   else if (need_stdcxx)
     {
-      generate_option (OPT_l,
-		       (saw_profile_flag
-			? LIBSTDCXX_PROFILE
-			: LIBSTDCXX),
-		       1, CL_DRIVER, &new_decoded_options[j++]);
-      added_libraries++;
+#ifdef HAVE_LD_STATIC_DYNAMIC
+      if (saw_static_libcxx && !static_link)
+	{
+	  generate_option (OPT_Wl_, LD_STATIC_OPTION, 1, CL_DRIVER,
+			   &new_decoded_options[j++]);
+	}
+#else
+      /* Push the -static-libstdc++ option back onto the command so that
+	 a target without LD_STATIC_DYNAMIC can use outfile substitution.  */
+      if (saw_static_libcxx && !static_link)
+	generate_option (OPT_static_libstdc__, NULL, 1, CL_DRIVER,
+			 &new_decoded_options[j++]);
+#endif
+      if (saw_libcxx)
+	new_decoded_options[j++] = *saw_libcxx;
+      else if (need_stdcxx)
+	{
+	  generate_option (OPT_l,
+			   (saw_profile_flag
+			    ? LIBSTDCXX_PROFILE
+			    : LIBSTDCXX),
+			   1, CL_DRIVER, &new_decoded_options[j++]);
+	  added_libraries++;
+	}
+#ifdef HAVE_LD_STATIC_DYNAMIC
+      if (saw_static_libcxx && !static_link)
+	{
+	  generate_option (OPT_Wl_, LD_DYNAMIC_OPTION, 1, CL_DRIVER,
+			   &new_decoded_options[j++]);
+	}
+#endif
     }
 
   if (shared_libgcc && !static_link)
