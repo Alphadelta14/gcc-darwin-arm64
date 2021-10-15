@@ -64,17 +64,17 @@ validate_macosx_version_min (const char *version_str)
 
   major = strtoul (version_str, &end, 10);
 
-  if (major < 10 || major > 11 ) /* MacOS 10 and 11 are known. */
+  if (major < 10 || major > 12 ) /* macOS 10, 11, and 12 are known. */
     return NULL;
 
   /* Skip a separating period, if there's one.  */
   version_str = end + ((*end == '.') ? 1 : 0);
 
-  if (major == 11 && *end != '\0' && !ISDIGIT (version_str[0]))
-     /* For MacOS 11, we allow just the major number, but if the minor is
+  if (major > 10 && *end != '\0' && !ISDIGIT (version_str[0]))
+     /* For macOS 11+, we allow just the major number, but if the minor is
 	there it must be numeric.  */
     return NULL;
-  else if (major == 11 && *end == '\0')
+  else if (major > 10 && *end == '\0')
     /* We will rewrite 11 =>  11.0.0.  */
     need_rewrite = true;
   else if (major == 10 && (*end == '\0' || !ISDIGIT (version_str[0])))
@@ -143,7 +143,7 @@ darwin_find_version_from_kernel (void)
   if (sysctl (osversion_name, ARRAY_SIZE (osversion_name), osversion,
 	      &osversion_len, NULL, 0) == -1)
     {
-      warning (0, "sysctl for kern.osversion failed: %m");
+      warning (0, "%<sysctl%> for %<kern.osversion%> failed: %m");
       return NULL;
     }
 
@@ -172,7 +172,7 @@ darwin_find_version_from_kernel (void)
       if (minor_vers > 0)
 	minor_vers -= 1; /* Kernel 20.3 => macOS 11.2.  */
       /* It's not yet clear whether patch level will be considered.  */
-      asprintf (&new_flag, "11.%02d.00", minor_vers);
+      asprintf (&new_flag, "%d.%02d.00", major_vers - 9, minor_vers);
     }
   else if (major_vers - 4 <= 4)
     /* On 10.4 and earlier, the old linker is used which does not
@@ -189,7 +189,7 @@ darwin_find_version_from_kernel (void)
   return new_flag;
 
  parse_failed:
-  warning (0, "couldn%'t understand kern.osversion %q.*s",
+  warning (0, "could not understand %<kern.osversion%> %q.*s",
 	   (int) osversion_len, osversion);
   return NULL;
 }
@@ -229,7 +229,7 @@ darwin_default_min_version (void)
       const char *checked = validate_macosx_version_min (new_flag);
       if (checked == NULL)
 	{
-	  warning (0, "could not understand version %s", new_flag);
+	  warning (0, "could not understand version %qs", new_flag);
 	  return NULL;
 	}
       new_flag = xstrndup (checked, strlen (checked));
@@ -277,13 +277,17 @@ darwin_driver_init (unsigned int *decoded_options_count,
   bool seenX86_64 = false;
   bool seenPPC = false;
   bool seenPPC64 = false;
+#if !DARWIN_ARM64
+  bool seenArm64 = false;
   bool seenM32 = false;
   bool seenM64 = false;
   bool appendM32 = false;
   bool appendM64 = false;
+#endif
   const char *vers_string = NULL;
   bool seen_version_min = false;
   bool seen_sysroot_p = false;
+  bool seen_rpath_p = false;
 
   for (i = 1; i < *decoded_options_count; i++)
     {
@@ -304,8 +308,14 @@ darwin_driver_init (unsigned int *decoded_options_count,
 	    seenPPC = true;
 	  else if (!strcmp ((*decoded_options)[i].arg, "ppc64"))
 	    seenPPC64 = true;
+	  else if (!strcmp ((*decoded_options)[i].arg, "arm64"))
+#if !DARWIN_ARM64
+	    seenArm64 = true;
+#else
+	    ; /* We accept the option, but don't need to act on it.  */
+#endif
 	  else
-	    error ("this compiler does not support %s",
+	    error ("this compiler does not support %qs",
 		   (*decoded_options)[i].arg);
 	  /* Now we've examined it, drop the -arch arg.  */
 	  if (*decoded_options_count > i) {
@@ -317,7 +327,7 @@ darwin_driver_init (unsigned int *decoded_options_count,
 	  --i;
 	  --*decoded_options_count; 
 	  break;
-
+#if !DARWIN_ARM64
 	case OPT_m32:
 	  seenM32 = true;
 	  break;
@@ -325,7 +335,7 @@ darwin_driver_init (unsigned int *decoded_options_count,
 	case OPT_m64:
 	  seenM64 = true;
 	  break;
-
+#endif
 	case OPT_filelist:
 	case OPT_framework:
 	  ++*decoded_options_count;
@@ -369,6 +379,13 @@ darwin_driver_init (unsigned int *decoded_options_count,
 	  seen_sysroot_p = true;
 	  break;
 
+	case OPT_Xlinker:
+	case OPT_Wl_:
+	  gcc_checking_assert ((*decoded_options)[i].arg);
+	  if (strncmp ((*decoded_options)[i].arg, "-rpath", 6) == 0)
+	    seen_rpath_p = true;
+	  break;
+
 	default:
 	  break;
 	}
@@ -383,43 +400,53 @@ darwin_driver_init (unsigned int *decoded_options_count,
 #if DARWIN_X86
   if (seenPPC || seenPPC64)
     warning (0, "this compiler does not support PowerPC (arch flags ignored)");
+  else if (seenArm64)
+    warning (0, "this compiler does not support Arm64 (arch flags ignored)");
   if (seenX86)
     {
       if (seenX86_64 || seenM64)
-	warning (0, "%s conflicts with i386 (arch flags ignored)",
-	        (seenX86_64? "x86_64": "m64"));
+	warning (0, "%qs conflicts with %<i386%> (arch flags ignored)",
+	        (seenX86_64? "x86_64": "-m64"));
       else if (! seenM32) /* Add -m32 if the User didn't. */
 	appendM32 = true;
     }
   else if (seenX86_64)
     {
       if (seenX86 || seenM32)
-	warning (0, "%s conflicts with x86_64 (arch flags ignored)",
-		 (seenX86? "i386": "m32"));
+	warning (0, "%qs conflicts with %<x86_64%> (arch flags ignored)",
+		 (seenX86? "i386": "-m32"));
       else if (! seenM64) /* Add -m64 if the User didn't. */
 	appendM64 = true;
     }  
 #elif DARWIN_PPC
   if (seenX86 || seenX86_64)
-    warning (0, "this compiler does not support X86 (arch flags ignored)");
+    warning (0, "this compiler does not support x86 (arch flags ignored)");
+  else if (seenArm64)
+    warning (0, "this compiler does not support Arm64 (arch flags ignored)");
   if (seenPPC)
     {
       if (seenPPC64 || seenM64)
-	warning (0, "%s conflicts with ppc (arch flags ignored)",
-		 (seenPPC64? "ppc64": "m64"));
+	warning (0, "%qs conflicts with %<ppc%> (arch flags ignored)",
+		 (seenPPC64? "ppc64": "-m64"));
       else if (! seenM32) /* Add -m32 if the User didn't. */
 	appendM32 = true;
     }
   else if (seenPPC64)
     {
       if (seenPPC || seenM32)
-	warning (0, "%s conflicts with ppc64 (arch flags ignored)",
-		 (seenPPC? "ppc": "m32"));
+	warning (0, "%qs conflicts with %<ppc64%> (arch flags ignored)",
+		 (seenPPC? "ppc": "-m32"));
       else if (! seenM64) /* Add -m64 if the User didn't. */
 	appendM64 = true;
     }
+#elif DARWIN_ARM64
+  if (seenPPC || seenPPC64)
+    warning (0, "this compiler does not support %<PowerPC%> (arch flags ignored)");
+  if (seenX86 || seenX86_64)
+    warning (0, "this compiler does not support %<X86%> (arch flags ignored)");
 #endif
 
+#if !DARWIN_ARM64
   if (appendM32 || appendM64)
     {
       ++*decoded_options_count;
@@ -429,6 +456,7 @@ darwin_driver_init (unsigned int *decoded_options_count,
       generate_option (appendM32 ? OPT_m32 : OPT_m64, NULL, 1, CL_DRIVER,
 		       &(*decoded_options)[*decoded_options_count - 1]);
     }
+#endif
 
   if (! seen_sysroot_p)
     {
@@ -485,5 +513,15 @@ darwin_driver_init (unsigned int *decoded_options_count,
 	  generate_option (OPT_asm_macosx_version_min_, asm_major, 1, CL_DRIVER,
 			  &(*decoded_options)[*decoded_options_count - 1]);
         }
+    }
+
+  if (seen_rpath_p)
+    {
+      ++*decoded_options_count;
+      *decoded_options = XRESIZEVEC (struct cl_decoded_option,
+				     *decoded_options,
+				     *decoded_options_count);
+      generate_option (OPT_nodefaultrpath, NULL, 1, CL_DRIVER,
+		       &(*decoded_options)[*decoded_options_count - 1]);
     }
 }

@@ -702,9 +702,9 @@ case ${target} in
       *-*-darwin[4-9]* | *-*-darwin1[0-9]*)
         macos_min=`expr $darwin_maj - 4`
         ;;
-      *-*-darwin20*)
-        # Darwin 20 corresponds to macOS 11.
-        macos_maj=11
+      *-*-darwin2*)
+        # Darwin 20 corresponds to macOS 11, Darwin 21 to macOS 12.
+        macos_maj=`expr $darwin_maj - 9`
         def_ld64=609.0
         ;;
       *-*-darwin)
@@ -1120,6 +1120,11 @@ aarch64*-*-elf | aarch64*-*-fuchsia* | aarch64*-*-rtems*)
 		esac
 	done
 	TM_MULTILIB_CONFIG=`echo $TM_MULTILIB_CONFIG | sed 's/^,//'`
+	;;
+aarch64-*-darwin* | arm64-*-darwin*)
+	tm_file="${tm_file} aarch64/aarch64-errata.h"
+	tmake_file="${tmake_file} aarch64/t-aarch64 aarch64/t-aarch64-darwin"
+	tm_defines="${tm_defines} TARGET_DEFAULT_ASYNC_UNWIND_TABLES=1"
 	;;
 aarch64*-*-freebsd*)
 	tm_file="${tm_file} dbxelf.h elfos.h ${fbsd_tm_file}"

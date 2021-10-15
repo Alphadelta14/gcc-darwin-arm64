@@ -42,6 +42,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #define DARWIN_X86 0
 #define DARWIN_PPC 0
+#define DARWIN_ARM64 0
 
 /* Suppress g++ attempt to link in the math library automatically. */
 #define MATH_LIBRARY ""
@@ -239,6 +240,7 @@ extern GTY(()) int darwin_ms_struct;
     DARWIN_RDYNAMIC \
     DARWIN_NOCOMPACT_UNWIND \
     "}}}}}}} %<pie %<no-pie %<rdynamic %<X "
+    "%{!r:%{!nostdlib:%{!rpath:%{!nodefaultrpath:%(darwin_rpaths)}}}} " \
 
 #define DSYMUTIL "\ndsymutil"
 
@@ -252,7 +254,7 @@ extern GTY(()) int darwin_ms_struct;
     %{v} \
     %{g*:%{!gstabs*:%{%:debug-level-gt(0): -idsym}}}\
     %{.c|.cc|.C|.cpp|.cp|.c++|.cxx|.CPP|.m|.mm|.s|.f|.f90|\
-      .f95|.f03|.f77|.for|.F|.F90|.F95|.F03: \
+      .f95|.f03|.f77|.for|.F|.F90|.F95|.F03|.d: \
     %{g*:%{!gstabs*:%{%:debug-level-gt(0): -dsym}}}}}}}}}}}"
 
 #define LINK_COMMAND_SPEC LINK_COMMAND_SPEC_A DSYMUTIL_SPEC
@@ -260,14 +262,11 @@ extern GTY(()) int darwin_ms_struct;
 /* Tell collect2 to run dsymutil for us as necessary.  */
 #define COLLECT_RUN_DSYMUTIL 1
 
-/* Fix PR47558 by linking against libSystem ahead of libgcc. See also
-   PR 80556 and the fallout from this.  */
-
+/* We only want one instance of %G, since libSystem (Darwin's -lc) does not
+   depend on libgcc. */
 #undef  LINK_GCC_C_SEQUENCE_SPEC
 #define LINK_GCC_C_SEQUENCE_SPEC \
-"%{!static:%{!static-libgcc: \
-    %:version-compare(>= 10.6 mmacosx-version-min= -lSystem) } } \
-  %G %{!nolibc:%L}"
+ "%G %{!nolibc:%L} "
 
 /* ld64 supports a sysroot, it just has a different name and there's no easy
    way to check for it at config time.  */
@@ -307,7 +306,7 @@ extern GTY(()) int darwin_ms_struct;
      %{Zbundle_loader*:-bundle_loader %*} \
      %{client_name*} \
      %{compatibility_version*:%e-compatibility_version only allowed with -dynamiclib\
-} \
+   } \
      %{current_version*:%e-current_version only allowed with -dynamiclib} \
      %{Zforce_flat_namespace:-force_flat_namespace} \
      %{Zinstall_name*:%e-install_name only allowed with -dynamiclib} \
@@ -370,42 +369,65 @@ extern GTY(()) int darwin_ms_struct;
    %{whatsloaded} %{dylinker_install_name*} \
    %{dylinker} "
 
-
 /* Machine dependent libraries.  */
 
 #define LIB_SPEC "%{!static:-lSystem}"
 
-/* Support -mmacosx-version-min by supplying different (stub) libgcc_s.dylib
-   libraries to link against, and by not linking against libgcc_s on
-   earlier-than-10.3.9.  If we need exceptions, prior to 10.3.9, then we have
-   to link the static eh lib, since there's no shared version on the system.
-
-   Note that by default, except as above, -lgcc_eh is not linked against.
+/*
+   Note that by default, -lgcc_eh is not linked against.
    This is because,in general, we need to unwind through system libraries that
    are linked with the shared unwinder in libunwind (or libgcc_s for 10.4/5).
 
-   The static version of the current libgcc unwinder (which differs from the
-   implementation in libunwind.dylib on systems Darwin10 [10.6]+) can be used
-   by specifying -static-libgcc.
+   For -static-libgcc: < 10.6, use the unwinder in libgcc_eh (and find
+   the emultls impl. there too).
 
-   If libgcc_eh is linked against, it has to be before -lgcc, because it might
-   need symbols from -lgcc.  */
+   For -static-libgcc: >= 10.6, the unwinder *still* comes from libSystem and
+   we find the emutls impl from lemutls_w. In either case, the builtins etc.
+   are linked from -lgcc.
 
+   When we have specified shared-libgcc or any case that might require
+   exceptions, we pull the libgcc content (including emulated tls) from
+   -lgcc_s.1 in GCC and the unwinder from /usr/lib/libgcc_s.1 for < 10.6 and
+   libSystem for >= 10.6 respectively.
+   Otherwise, we just link the emutls/builtins from convenience libs.
+
+   If we need exceptions, prior to 10.3.9, then we have to link the static
+   eh lib, since there's no shared version on the system.
+
+   In all cases, libgcc_s.1 will be installed with the compiler, or any app
+   built using it, so we can link the builtins and emutls shared on all.
+
+   We have to work around that DYLD_XXXX are disabled in macOS 10.11+ which
+   means that any bootstrap trying to use a shared libgcc with a bumped SO-
+   name will fail.  This means that we do not accept shared libgcc for these
+   versions.
+
+   For -static-libgcc: >= 10.6, the unwinder *still* comes from libSystem and
+   we find the emutls impl from lemutls_w. In either case, the builtins etc.
+   are linked from -lgcc.
+>
+   Otherwise, we just link the shared version of gcc_s.1.1 and pick up
+   exceptions:
+     * Prior to 10.3.9, then we have to link the static eh lib, since there
+       is no shared version on the system.
+     * from 10.3.9 to 10.5, from /usr/lib/libgcc_s.1.dylib
+     * from 10.6 onwards, from libSystem.dylib
+
+   In all cases, libgcc_s.1.1 will be installed with the compiler, or any app
+   built using it, so we can link the builtins and emutls shared on all.
+*/
 #undef REAL_LIBGCC_SPEC
-#define REAL_LIBGCC_SPEC						   \
-   "%{static-libgcc|static: -lgcc_eh -lgcc;				   \
-      shared-libgcc|fexceptions|fobjc-exceptions|fgnu-runtime:		   \
-       %:version-compare(!> 10.3.9 mmacosx-version-min= -lgcc_eh)	   \
-       %:version-compare(>< 10.3.9 10.5 mmacosx-version-min= -lgcc_s.10.4) \
-       %:version-compare(>< 10.5 10.6 mmacosx-version-min= -lgcc_s.10.5)   \
-       %:version-compare(>< 10.3.9 10.5 mmacosx-version-min= -lgcc_ext.10.4) \
-       %:version-compare(>= 10.5 mmacosx-version-min= -lgcc_ext.10.5)	   \
-       -lgcc ;								   \
-      :%:version-compare(>< 10.3.9 10.5 mmacosx-version-min= -lgcc_s.10.4) \
-       %:version-compare(>< 10.5 10.6 mmacosx-version-min= -lgcc_s.10.5)   \
-       %:version-compare(>< 10.3.9 10.5 mmacosx-version-min= -lgcc_ext.10.4) \
-       %:version-compare(>= 10.5 mmacosx-version-min= -lgcc_ext.10.5)	   \
-       -lgcc }"
+#define REAL_LIBGCC_SPEC \
+"%{static-libgcc|static:						  \
+    %:version-compare(!> 10.6 mmacosx-version-min= -lgcc_eh)		  \
+    %:version-compare(>= 10.6 mmacosx-version-min= -lemutls_w);		  \
+   shared-libgcc|fexceptions|fobjc-exceptions|fgnu-runtime:		  \
+   -lgcc_s.1.1								  \
+    %:version-compare(!> 10.3.9 mmacosx-version-min= -lgcc_eh)		  \
+    %:version-compare(>< 10.3.9 10.5 mmacosx-version-min= -lgcc_s.10.4)   \
+    %:version-compare(>< 10.5 10.6 mmacosx-version-min= -lgcc_s.10.5);	  \
+   : -lemutls_w								  \
+  } -lgcc "
 
 /* We specify crt0.o as -lcrt0.o so that ld will search the library path.  */
 
@@ -418,7 +440,7 @@ extern GTY(()) int darwin_ms_struct;
                                %{!object:%{preload:-lgcrt0.o}		    \
                                  %{!preload:-lgcrt1.o                       \
                                  %:version-compare(>= 10.8 mmacosx-version-min= -no_new_main) \
-                                 %(darwin_crt2)}}}}    \
+                                 %(darwin_crt2)}}}}                         \
                 %{!pg:%{static:-lcrt0.o}				    \
                       %{!static:%{object:-lcrt0.o}			    \
                                 %{!object:%{preload:-lcrt0.o}		    \
@@ -428,6 +450,7 @@ extern GTY(()) int darwin_ms_struct;
 
 /* We want a destructor last in the list.  */
 #define TM_DESTRUCTOR "%{fgnu-tm: -lcrttme.o}"
+
 #define ENDFILE_SPEC TM_DESTRUCTOR
 
 #define DARWIN_EXTRA_SPECS						\
@@ -435,7 +458,8 @@ extern GTY(()) int darwin_ms_struct;
   { "darwin_crt2", DARWIN_CRT2_SPEC },					\
   { "darwin_crt3", DARWIN_CRT3_SPEC },					\
   { "darwin_dylib1", DARWIN_DYLIB1_SPEC },				\
-  { "darwin_bundle1", DARWIN_BUNDLE1_SPEC },
+  { "darwin_bundle1", DARWIN_BUNDLE1_SPEC },				\
+  { "darwin_rpaths", DARWIN_RPATH_SPEC },
 
 #define DARWIN_CRT1_SPEC						\
   "%:version-compare(!> 10.5 mmacosx-version-min= -lcrt1.o)		\
@@ -460,6 +484,13 @@ extern GTY(()) int darwin_ms_struct;
 #define DARWIN_BUNDLE1_SPEC \
 "%{!static:%:version-compare(< 10.6 mmacosx-version-min= -lbundle1.o)	\
 	   %{fgnu-tm: -lcrttms.o}}"
+
+/* FIXME: it would be great to have a version-compare that accepts multiple
+   arguments.  */
+#define DARWIN_RPATH_SPEC \
+  "%:version-compare(>= 10.5 mmacosx-version-min= -rpath) \
+   %:version-compare(>= 10.5 mmacosx-version-min= @loader_path) \
+   %P "
 
 #ifdef HAVE_AS_MMACOSX_VERSION_MIN_OPTION
 /* Emit macosx version (but only major).  */
@@ -710,34 +741,35 @@ int darwin_label_is_anonymous_local_objc_name (const char *name);
 
 #undef	ASM_OUTPUT_LABELREF
 #define ASM_OUTPUT_LABELREF(FILE,NAME)					     \
-  do {									     \
-       const char *xname = (NAME);					     \
-       if (! strcmp (xname, MACHOPIC_FUNCTION_BASE_NAME))		     \
-         machopic_output_function_base_name(FILE);                           \
-       else if (xname[0] == '&' || xname[0] == '*')			     \
-         {								     \
-           int len = strlen (xname);					     \
-	   if (len > 6 && !strcmp ("$stub", xname + len - 5))		     \
-	     machopic_validate_stub_or_non_lazy_ptr (xname);		     \
-	   else if (len > 7 && !strcmp ("$stub\"", xname + len - 6))	     \
-	     machopic_validate_stub_or_non_lazy_ptr (xname);		     \
-	   else if (len > 14 && !strcmp ("$non_lazy_ptr", xname + len - 13)) \
-	     machopic_validate_stub_or_non_lazy_ptr (xname);		     \
-	   else if (len > 15 && !strcmp ("$non_lazy_ptr\"", xname + len - 14)) \
-	     machopic_validate_stub_or_non_lazy_ptr (xname);		     \
-	   if (xname[1] != '"' && name_needs_quotes (&xname[1]))	     \
-	     fprintf (FILE, "\"%s\"", &xname[1]);			     \
-	   else								     \
-	     fputs (&xname[1], FILE); 					     \
-	 }								     \
-       else if (xname[0] == '+' || xname[0] == '-')			     \
-         fprintf (FILE, "\"%s\"", xname);				     \
-       else if (darwin_label_is_anonymous_local_objc_name (xname))	     \
-         fprintf (FILE, "L%s", xname);					     \
-       else if (xname[0] != '"' && name_needs_quotes (xname))		     \
+  do									     \
+    {									     \
+      const char *xname = (NAME);					     \
+      if (! strcmp (xname, MACHOPIC_FUNCTION_BASE_NAME))		     \
+	machopic_output_function_base_name(FILE);			     \
+      else if (xname[0] == '&' || xname[0] == '*')			     \
+	{								     \
+	  int len = strlen (xname);					     \
+	  if (len > 6 && !strcmp ("$stub", xname + len - 5))		     \
+	    machopic_validate_stub_or_non_lazy_ptr (xname);		     \
+	  else if (len > 7 && !strcmp ("$stub\"", xname + len - 6))	     \
+	    machopic_validate_stub_or_non_lazy_ptr (xname);		     \
+	  else if (len > 14 && !strcmp ("$non_lazy_ptr", xname + len - 13))  \
+	    machopic_validate_stub_or_non_lazy_ptr (xname);		     \
+	  else if (len > 15 && !strcmp ("$non_lazy_ptr\"", xname + len - 14))\
+	    machopic_validate_stub_or_non_lazy_ptr (xname);		     \
+	  if (xname[1] != '"' && name_needs_quotes (&xname[1]))		     \
+	    fprintf (FILE, "\"%s\"", &xname[1]);			     \
+	  else								     \
+	    fputs (&xname[1], FILE); 					     \
+	}								     \
+      else if (xname[0] == '+' || xname[0] == '-')			     \
+	fprintf (FILE, "\"%s\"", xname);				     \
+      else if (darwin_label_is_anonymous_local_objc_name (xname))	     \
+	fprintf (FILE, "l%s", xname);					     \
+      else if (xname[0] != '"' && name_needs_quotes (xname))		     \
 	 asm_fprintf (FILE, "\"%U%s\"", xname);				     \
-       else								     \
-         asm_fprintf (FILE, "%U%s", xname);				     \
+      else								     \
+	asm_fprintf (FILE, "%U%s", xname);				     \
   } while (0)
 
 /* Output before executable code.  */
@@ -844,6 +876,8 @@ extern GTY(()) section * darwin_sections[NUM_DARWIN_SECTIONS];
       sprintf (LABEL, "*%s%ld", "lubsan_type", (long)(NUM));\
     else if (strcmp ("LASAN", PREFIX) == 0)	\
       sprintf (LABEL, "*%s%ld", "lASAN", (long)(NUM));\
+    else if (strcmp ("LTRAMP", PREFIX) == 0)	\
+      sprintf (LABEL, "*%s%ld", "lTRAMP", (long)(NUM));\
     else						\
       sprintf (LABEL, "*%s%ld", PREFIX, (long)(NUM));	\
   } while (0)

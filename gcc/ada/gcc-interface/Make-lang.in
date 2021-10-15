@@ -655,6 +655,14 @@ endif
 # For unwind-pe.h
 CFLAGS-ada/raise-gcc.o += -I$(srcdir)/../libgcc -DEH_MECHANISM_$(EH_MECHANISM)
 
+# Under aarch64 darwin, we need to include the rtl signal trampoline.
+
+ifeq ($(strip $(filter-out aarch64 arm64 darwin%,$(host_cpu) $(host_os))),)
+  EXTRA_HOST_OBJS=ada/sigtramp-ios.o
+else
+  EXTRA_HOST_OBJS =
+endif
+
 ada/libgnat/s-excmac.o: ada/libgnat/s-excmac.ads ada/libgnat/s-excmac.adb
 
 ada/libgnat/s-excmac.ads: $(srcdir)/ada/libgnat/s-excmac__$(EH_MECHANISM).ads

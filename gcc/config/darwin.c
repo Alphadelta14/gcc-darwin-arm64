@@ -112,7 +112,7 @@ static bool ld_needs_eh_markers = false;
 section * darwin_sections[NUM_DARWIN_SECTIONS];
 
 /* While we transition to using in-tests instead of ifdef'd code.  */
-#if !HAVE_lo_sum
+#if !HAVE_lo_sum || DARWIN_ARM64
 #define gen_macho_high(m,a,b) (a)
 #define gen_macho_low(m,a,b,c) (a)
 #endif
@@ -1046,6 +1046,7 @@ machopic_legitimize_pic_address (rtx orig, machine_mode mode, rtx reg)
   return pic_ref;
 }
 
+#if !DARWIN_ARM64
 /* Callbacks to output the stub or non-lazy pointers.
    Each works on the item in *SLOT,if it has been used.
    DATA is the FILE* for assembly output.
@@ -1201,6 +1202,7 @@ machopic_finish (FILE *asm_out_file)
   machopic_indirections->traverse_noresize
     <FILE *, machopic_output_indirection> (asm_out_file);
 }
+#endif
 
 int
 machopic_operand_p (rtx op)
@@ -2223,6 +2225,8 @@ darwin_emit_except_table_label (FILE *file)
 rtx
 darwin_make_eh_symbol_indirect (rtx orig, bool ARG_UNUSED (pubvis))
 {
+  if (DARWIN_ARM64)
+    return orig;
   if (DARWIN_PPC == 0 && TARGET_64BIT)
     return orig;
 
@@ -3034,7 +3038,12 @@ darwin_file_end (void)
       fprintf (asm_out_file, "\t.long\t0\n\t.long\t%u\n", flags);
      }
 
+#if !DARWIN_ARM64
   machopic_finish (asm_out_file);
+#else
+  gcc_checking_assert (!machopic_indirections);
+#endif
+
   if (flag_apple_kext)
     {
       /* These sections are only used for kernel code.  */
@@ -3600,30 +3609,6 @@ darwin_fold_builtin (tree fndecl, int n_args, tree *argp,
 void
 darwin_rename_builtins (void)
 {
-  /* The system ___divdc3 routine in libSystem on darwin10 is not
-     accurate to 1ulp, ours is, so we avoid ever using the system name
-     for this routine and instead install a non-conflicting name that
-     is accurate.
-
-     When -ffast-math or -funsafe-math-optimizations is given, we can
-     use the faster version.  */
-  if (!flag_unsafe_math_optimizations)
-    {
-      enum built_in_function dcode
-	= (enum built_in_function)(BUILT_IN_COMPLEX_DIV_MIN
-				   + DCmode - MIN_MODE_COMPLEX_FLOAT);
-      tree fn = builtin_decl_explicit (dcode);
-      /* Fortran and c call TARGET_INIT_BUILTINS and
-	 TARGET_INIT_LIBFUNCS at different times, so we have to put a
-	 call into each to ensure that at least one of them is called
-	 after build_common_builtin_nodes.  A better fix is to add a
-	 new hook to run after build_common_builtin_nodes runs.  */
-      if (fn)
-	set_user_assembler_name (fn, "___ieee_divdc3");
-      fn = builtin_decl_implicit (dcode);
-      if (fn)
-	set_user_assembler_name (fn, "___ieee_divdc3");
-    }
 }
 
 bool
