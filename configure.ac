@@ -2781,6 +2781,8 @@ else
   GCC_SHLIB_SUBDIR=
 fi
 
+AM_CONDITIONAL([ENABLE_DARWIN_AT_RPATH], [test "x$enable_darwin_at_rpath" = "xyes"])
+
 # Adjust the toplevel makefile according to whether bootstrap was selected.
 case $enable_bootstrap in
   yes)
