@@ -18307,6 +18307,10 @@ aarch64_classify_symbol (rtx x, HOST_WIDE_INT offset)
 		   ? SYMBOL_MO_SMALL_GOT
 		   : SYMBOL_MO_SMALL_PCR;
 #endif
+	  if (!aarch64_symbol_binds_local_p (x))
+	    return (aarch64_cmodel == AARCH64_CMODEL_SMALL_SPIC
+		    ?  SYMBOL_SMALL_GOT_28K : SYMBOL_SMALL_GOT_4G);
+	  return SYMBOL_SMALL_ABSOLUTE;
 	case AARCH64_CMODEL_SMALL:
 	  /* Same reasoning as the tiny code model, but the offset cap here is
 	     1MB, allowing +/-3.9GB for the offset to the symbol.  */
@@ -18323,13 +18327,6 @@ aarch64_classify_symbol (rtx x, HOST_WIDE_INT offset)
 	  if (!aarch64_symbol_binds_local_p (x))
 	    return SYMBOL_TINY_GOT;
 	  return SYMBOL_TINY_ABSOLUTE;
-
-	case AARCH64_CMODEL_SMALL_SPIC:
-	case AARCH64_CMODEL_SMALL_PIC:
-	  if (!aarch64_symbol_binds_local_p (x))
-	    return (aarch64_cmodel == AARCH64_CMODEL_SMALL_SPIC
-		    ?  SYMBOL_SMALL_GOT_28K : SYMBOL_SMALL_GOT_4G);
-	  return SYMBOL_SMALL_ABSOLUTE;
 
 	case AARCH64_CMODEL_LARGE:
 	  /* This is alright even in PIC code as the constant
