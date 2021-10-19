@@ -60,11 +60,7 @@ libasan_la_LIBADD += $(top_builddir)/libbacktrace/libsanitizer_libbacktrace.la
 endif
 libasan_la_LIBADD += $(LIBSTDCXX_RAW_CXX_LDFLAGS)
 
-if ENABLE_DARWIN_AT_RPATH
-libasan_darwin_rpath = -Wl,-rpath,@loader_path
-endif
-libasan_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` \
-	$(link_libasan) $(libasan_darwin_rpath)
+libasan_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` $(link_libasan)
 
 libasan_preinit.o: asan_preinit.o
 	cp $< $@

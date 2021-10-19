@@ -462,10 +462,7 @@ libtsan_la_DEPENDENCIES =  \
 	$(top_builddir)/sanitizer_common/libsanitizer_common.la \
 	$(top_builddir)/interception/libinterception.la \
 	$(TSAN_TARGET_DEPENDENT_OBJECTS) $(am__append_2)
-@ENABLE_DARWIN_AT_RPATH_TRUE@libtsan_darwin_rpath = -Wl,-rpath,@loader_path
-libtsan_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` \
-	$(link_libtsan) $(libtsan_darwin_rpath)
-
+libtsan_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` $(link_libtsan)
 
 # Work around what appears to be a GNU make bug handling MAKEFLAGS
 # values defined in terms of make variables, as is the case for CC and
