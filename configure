@@ -673,8 +673,6 @@ target_configargs
 host_configargs
 build_configargs
 BUILD_CONFIG
-ENABLE_DARWIN_AT_RPATH_FALSE
-ENABLE_DARWIN_AT_RPATH_TRUE
 LDFLAGS_FOR_TARGET
 CXXFLAGS_FOR_TARGET
 CFLAGS_FOR_TARGET
@@ -762,7 +760,6 @@ infodir
 docdir
 oldincludedir
 includedir
-runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -932,7 +929,6 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
-runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE}'
@@ -1185,15 +1181,6 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
-  -runstatedir | --runstatedir | --runstatedi | --runstated \
-  | --runstate | --runstat | --runsta | --runst | --runs \
-  | --run | --ru | --r)
-    ac_prev=runstatedir ;;
-  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
-  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
-  | --run=* | --ru=* | --r=*)
-    runstatedir=$ac_optarg ;;
-
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1331,7 +1318,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir runstatedir
+		libdir localedir mandir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1491,7 +1478,6 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
-  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -9292,15 +9278,6 @@ if test "$RPATH_ENVVAR" = PATH; then
 else
   GCC_SHLIB_SUBDIR=
 fi
-
- if test "x$enable_darwin_at_rpath" = "xyes"; then
-  ENABLE_DARWIN_AT_RPATH_TRUE=
-  ENABLE_DARWIN_AT_RPATH_FALSE='#'
-else
-  ENABLE_DARWIN_AT_RPATH_TRUE='#'
-  ENABLE_DARWIN_AT_RPATH_FALSE=
-fi
-
 
 # Adjust the toplevel makefile according to whether bootstrap was selected.
 case $enable_bootstrap in
@@ -18113,10 +18090,6 @@ LIBOBJS=$ac_libobjs
 LTLIBOBJS=$ac_ltlibobjs
 
 
-if test -z "${ENABLE_DARWIN_AT_RPATH_TRUE}" && test -z "${ENABLE_DARWIN_AT_RPATH_FALSE}"; then
-  as_fn_error $? "conditional \"ENABLE_DARWIN_AT_RPATH\" was never defined.
-Usually this means the macro was only invoked conditionally." "$LINENO" 5
-fi
 
 : "${CONFIG_STATUS=./config.status}"
 ac_write_fail=0
