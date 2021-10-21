@@ -79,15 +79,41 @@ void __sfp_handle_exceptions (int);
    the arguments is and then apply that to the secondary function.
    If these functions ever return anything but CMPtype we need to revisit
    this... */
+
+#ifdef __LIBGCC_HAS_HF_MODE__
 typedef float alias_HFtype __attribute__ ((mode (HF)));
+#define select_HFtype_alias CMPtype (*) (alias_HFtype, alias_HFtype): (alias_HFtype) 0,
+#else
+#define select_HFtype_alias
+#endif
+
+#ifdef __LIBGCC_HAS_SF_MODE__
 typedef float alias_SFtype __attribute__ ((mode (SF)));
+#define select_SFtype_alias CMPtype (*) (alias_SFtype, alias_SFtype): (alias_SFtype) 0,
+#else
+#define select_SFtype_alias
+#endif
+
+#ifdef __LIBGCC_HAS_DF_MODE__
 typedef float alias_DFtype __attribute__ ((mode (DF)));
+#define select_DFtype_alias CMPtype (*) (alias_DFtype, alias_DFtype): (alias_DFtype) 0,
+#else
+#define select_DFtype_alias
+#endif
+
+#ifdef __LIBGCC_HAS_TF_MODE__
 typedef float alias_TFtype __attribute__ ((mode (TF)));
+// FIXME: what do we do about the comma if no TF_MODE...
+#define select_TFtype_alias CMPtype (*) (alias_TFtype, alias_TFtype): (alias_TFtype) 0
+#else
+#define select_TFtype_alias
+#endif
+
 #define ALIAS_SELECTOR \
-  CMPtype (*) (alias_HFtype, alias_HFtype): (alias_HFtype) 0, \
-  CMPtype (*) (alias_SFtype, alias_SFtype): (alias_SFtype) 0, \
-  CMPtype (*) (alias_DFtype, alias_DFtype): (alias_DFtype) 0, \
-  CMPtype (*) (alias_TFtype, alias_TFtype): (alias_TFtype) 0
+  select_HFtype_alias \
+  select_SFtype_alias \
+  select_DFtype_alias \
+  select_TFtype_alias
 #define strong_alias(name, aliasname) \
   CMPtype aliasname (__typeof (_Generic (name, ALIAS_SELECTOR)) a, \
 		     __typeof (_Generic (name, ALIAS_SELECTOR)) b) \
